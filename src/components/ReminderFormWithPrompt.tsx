@@ -1,247 +1,217 @@
 import React, { useEffect, useState } from "react";
-import { TimePicker, Checkbox, Button, Spin, Modal, message } from "antd";
+import { TimePicker, Checkbox, Button, message } from "antd";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import "dayjs/locale/ja";
 import { db } from "../firebase";
-import {
-  doc,
-  setDoc,
-  getDoc,
-  serverTimestamp,
-  deleteDoc,
-} from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 dayjs.locale("ja");
 
-type ReminderTime = {
-  beforeMeal: Dayjs | null;
-  afterMeal: Dayjs | null;
-  beforeSleep: Dayjs | null;
-};
-
-type ReminderData = {
-  [key: string]: {
-    active: boolean;
-    times: ReminderTime;
-  };
-};
-
-const weekdays = ["月", "火", "水", "木", "金", "土", "日"];
+const timings = ["朝", "昼", "夕", "就寝前"];
+const daysOfWeek = ["月", "火", "水", "木", "金", "土", "日"];
 
 const ReminderFormWithPrompt = () => {
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [times, setTimes] = useState<ReminderTime>({
-    beforeMeal: null,
-    afterMeal: null,
-    beforeSleep: null,
-  });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const reminderId = "reminder-setting";
+  const [selectedDay, setSelectedDay] = useState<string>("月");
+  const [loading, setLoading] = useState(false);
+  const [values, setValues] = useState<{
+    [timing: string]: {
+      time: Dayjs | null;
+      beforeMeal: boolean;
+      afterMeal: boolean;
+    };
+  }>({});
 
   useEffect(() => {
-    const fetchData = async () => {
-      const docRef = doc(db, "reminders", reminderId);
+    const loadData = async () => {
+      setLoading(true);
+      const docRef = doc(db, "reminders", selectedDay);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        const data = docSnap.data() as ReminderData;
-        const today = new Date().getDay();
-        const weekdayIndex = (today + 6) % 7;
-        const day = weekdays[weekdayIndex];
-        if (data[day]) {
-          setSelectedDays(
-            Object.entries(data)
-              .filter(([_, value]) => value.active)
-              .map(([key]) => key)
-          );
-          setTimes(data[day].times);
+        const data = docSnap.data();
+        const converted: typeof values = {};
+        for (const timing of Object.keys(data)) {
+          converted[timing] = {
+            time: data[timing].time
+              ? dayjs(
+                  data[timing].time?.toDate
+                    ? data[timing].time.toDate()
+                    : data[timing].time
+                )
+              : null,
+            beforeMeal: !!data[timing].beforeMeal,
+            afterMeal: !!data[timing].afterMeal,
+          };
         }
+        setValues(converted);
+      } else {
+        setValues({});
       }
       setLoading(false);
     };
+    loadData();
+  }, [selectedDay]);
 
-    fetchData();
-  }, []);
-
-  const handleCheckboxChange = (day: string, checked: boolean) => {
-    setSelectedDays((prev) =>
-      checked ? [...prev, day] : prev.filter((d) => d !== day)
-    );
+  const handleTimeChange = (timing: string, time: Dayjs | null) => {
+    setValues((prev) => ({
+      ...prev,
+      [timing]: { ...prev[timing], time },
+    }));
   };
 
-  const handleTimeChange = (type: keyof ReminderTime, time: Dayjs | null) => {
-    setTimes((prev) => ({ ...prev, [type]: time }));
+  const handleCheckboxChange = (
+    timing: string,
+    field: "beforeMeal" | "afterMeal",
+    checked: boolean
+  ) => {
+    setValues((prev) => ({
+      ...prev,
+      [timing]: { ...prev[timing], [field]: checked },
+    }));
   };
 
   const handleSave = async () => {
-    setSaving(true);
-    const newData: ReminderData = {};
-    weekdays.forEach((day) => {
-      newData[day] = {
-        active: selectedDays.includes(day),
-        times,
-      };
-    });
+    const dataToSave: any = {};
+    for (const timing of timings) {
+      const value = values[timing];
+      if (value) {
+        dataToSave[timing] = {
+          time: value.time ? value.time.toDate() : null,
+          beforeMeal: value.beforeMeal || false,
+          afterMeal: value.afterMeal || false,
+        };
+      }
+    }
 
     try {
-      await setDoc(doc(db, "reminders", reminderId), {
-        ...newData,
-        timestamp: serverTimestamp(),
+      await setDoc(doc(db, "reminders", selectedDay), {
+        ...dataToSave,
+        updatedAt: serverTimestamp(),
       });
-      message.success("リマインダーを保存しました");
-    } catch {
-      message.error("保存に失敗しました");
-    } finally {
-      setSaving(false);
+      message.success("リマインダーを保存しました！");
+    } catch (err) {
+      console.error(err);
+      message.error("保存に失敗しました。");
     }
   };
 
-  const handleDelete = async () => {
-    Modal.confirm({
-      title: "削除確認",
-      content: "本当に削除しますか？",
-      okText: "削除",
-      cancelText: "キャンセル",
-      onOk: async () => {
-        await deleteDoc(doc(db, "reminders", reminderId));
-        setSelectedDays([]);
-        setTimes({ beforeMeal: null, afterMeal: null, beforeSleep: null });
-        message.success("リマインダーを削除しました。");
-      },
-    });
+  const handleCopyFromPrevious = async () => {
+    const currentIndex = daysOfWeek.indexOf(selectedDay);
+    const prevDay = daysOfWeek[(currentIndex + 6) % 7];
+    const docRef = doc(db, "reminders", prevDay);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const copied: typeof values = {};
+      for (const timing of Object.keys(data)) {
+        copied[timing] = {
+          time: data[timing].time
+            ? dayjs(
+                data[timing].time?.toDate
+                  ? data[timing].time.toDate()
+                  : data[timing].time
+              )
+            : null,
+          beforeMeal: !!data[timing].beforeMeal,
+          afterMeal: !!data[timing].afterMeal,
+        };
+      }
+      setValues(copied);
+      message.success("前週のデータをコピーしました！");
+    } else {
+      message.warning("前週のデータが見つかりませんでした。");
+    }
   };
 
-  if (loading) return <Spin />;
+  const getDayButtonStyle = (day: string, index: number) => {
+    if (day === selectedDay) {
+      return { backgroundColor: "#e6f7ff", fontWeight: "bold" };
+    }
+    if (index === 6) {
+      return { backgroundColor: "#ffcccc", color: "red" }; // 日曜
+    }
+    if (index === 5) {
+      return { backgroundColor: "#cce5ff", color: "blue" }; // 土曜
+    }
+    return { backgroundColor: "white", color: "black" };
+  };
 
   return (
     <div
       style={{
-        backgroundColor: "#f5f0e6",
+        textAlign: "center",
         padding: "2rem",
-        borderRadius: "1rem",
-        fontSize: "1.5rem",
-        fontWeight: 500,
-        color: "#000",
+        color: "black",
+        backgroundColor: "#f5f0e1", // 薄ブラウン背景
+        minHeight: "100vh",
       }}
     >
-      <div style={{ marginBottom: "2rem" }}>
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-          {weekdays.map((day, idx) => {
-            const isSelected = selectedDays.includes(day);
-            const isSunday = idx === 6;
-            const isSaturday = idx === 5;
-            return (
-              <label
-                key={day}
-                style={{
-                  fontSize: "1.6rem",
-                  fontWeight: "bold",
-                  color: isSunday
-                    ? "red"
-                    : isSaturday
-                    ? "blue"
-                    : isSelected
-                    ? "#000"
-                    : "#aaa",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
+      <h2 style={{ marginTop: "4rem" }}>服薬リマインダー</h2>
+
+      <div style={{ marginBottom: "1rem" }}>
+        {daysOfWeek.map((day, index) => (
+          <Button
+            key={day}
+            onClick={() => setSelectedDay(day)}
+            style={{
+              margin: "0 4px",
+              ...getDayButtonStyle(day, index),
+            }}
+          >
+            {day}
+          </Button>
+        ))}
+      </div>
+
+      {loading ? (
+        <p>読み込み中...</p>
+      ) : (
+        <div style={{ maxWidth: 500, margin: "0 auto" }}>
+          {timings.map((timing) => (
+            <div
+              key={timing}
+              style={{
+                marginBottom: "1rem",
+                padding: "1rem",
+                border: "1px solid #ccc",
+                borderRadius: "8px",
+              }}
+            >
+              <h3>{timing}</h3>
+              <TimePicker
+                value={values[timing]?.time || null}
+                onChange={(time) => handleTimeChange(timing, time)}
+                format="HH:mm"
+              />
+              <div style={{ marginTop: "0.5rem" }}>
                 <Checkbox
-                  checked={isSelected}
+                  checked={values[timing]?.beforeMeal || false}
                   onChange={(e) =>
-                    handleCheckboxChange(day, e.target.checked)
+                    handleCheckboxChange(timing, "beforeMeal", e.target.checked)
                   }
-                  style={{ transform: "scale(2)", marginRight: "0.5rem" }}
-                />
-                {day}
-              </label>
-            );
-          })}
+                >
+                  食前
+                </Checkbox>
+                <Checkbox
+                  checked={values[timing]?.afterMeal || false}
+                  onChange={(e) =>
+                    handleCheckboxChange(timing, "afterMeal", e.target.checked)
+                  }
+                  style={{ marginLeft: "1rem" }}
+                >
+                  食後
+                </Checkbox>
+              </div>
+            </div>
+          ))}
+          <Button type="primary" onClick={handleSave} style={{ marginRight: 10 }}>
+            保存
+          </Button>
+          <Button type="dashed" onClick={handleCopyFromPrevious}>
+            前週の設定をコピー
+          </Button>
         </div>
-      </div>
-
-      <table style={{ width: "100%", borderSpacing: "1.5rem" }}>
-        <thead>
-          <tr>
-            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>項目</th>
-            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>有効</th>
-            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>食前</th>
-            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>食後</th>
-            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>就寝前時間</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style={{ textAlign: "center" }}>服薬</td>
-            <td style={{ textAlign: "center" }}>
-              <Checkbox
-                checked={
-                  !!(times.beforeMeal || times.afterMeal || times.beforeSleep)
-                }
-                disabled
-                style={{ transform: "scale(2)" }}
-              />
-            </td>
-            <td style={{ textAlign: "center" }}>
-              <div
-                style={{
-                  fontSize: "1.5rem",
-                  fontWeight: "bold",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                {times.beforeMeal ? times.beforeMeal.format("HH:mm") : "ー"}
-              </div>
-              <TimePicker
-                value={times.beforeMeal}
-                onChange={(time) => handleTimeChange("beforeMeal", time)}
-                format="HH:mm"
-                placeholder="選択"
-                style={{ fontSize: "1.5rem", width: "100%" }}
-              />
-            </td>
-            <td style={{ textAlign: "center" }}>
-              <div
-                style={{
-                  fontSize: "1.5rem",
-                  fontWeight: "bold",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                {times.afterMeal ? times.afterMeal.format("HH:mm") : "ー"}
-              </div>
-              <TimePicker
-                value={times.afterMeal}
-                onChange={(time) => handleTimeChange("afterMeal", time)}
-                format="HH:mm"
-                placeholder="選択"
-                style={{ fontSize: "1.5rem", width: "100%" }}
-              />
-            </td>
-            <td style={{ textAlign: "center" }}>
-              <TimePicker
-                value={times.beforeSleep}
-                onChange={(time) => handleTimeChange("beforeSleep", time)}
-                format="HH:mm"
-                placeholder="選択"
-                style={{ fontSize: "1.5rem", width: "100%" }}
-              />
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div style={{ marginTop: "2rem", display: "flex", gap: "1rem" }}>
-        <Button type="primary" onClick={handleSave} loading={saving} size="large">
-          保存
-        </Button>
-        <Button danger onClick={handleDelete} size="large">
-          削除
-        </Button>
-      </div>
+      )}
     </div>
   );
 };
