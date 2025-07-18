@@ -1,140 +1,249 @@
 import React, { useEffect, useState } from "react";
-import { Button, Table, Typography, Spin } from "antd";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../firebase"; // Firebaseの初期化済みファイル
+import { TimePicker, Checkbox, Button, Spin, Modal, message } from "antd";
+import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
+import "dayjs/locale/ja";
+import { db } from "../firebase";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  serverTimestamp,
+  deleteDoc,
+} from "firebase/firestore";
 
-const { Title } = Typography;
+dayjs.locale("ja");
 
-const daysOfWeek = ["月", "火", "水", "木", "金", "土", "日"];
-
-type Reminder = {
-  朝?: { enabled: boolean; 食前?: string | null; 食後?: string | null };
-  昼?: { enabled: boolean; 食前?: string | null; 食後?: string | null };
-  夕?: { enabled: boolean; 食前?: string | null; 食後?: string | null };
-  就寝前?: { enabled: boolean; time?: string | null };
+type ReminderTime = {
+  beforeMeal: Dayjs | null;
+  afterMeal: Dayjs | null;
+  beforeSleep: Dayjs | null;
 };
 
-type WeekReminders = {
-  [key: string]: Reminder;
+type ReminderData = {
+  [key: string]: {
+    active: boolean;
+    times: ReminderTime;
+  };
 };
 
-const ReminderDisplay: React.FC = () => {
-  const [selectedDay, setSelectedDay] = useState("月");
-  const [allReminders, setAllReminders] = useState<WeekReminders>({});
+const weekdays = ["月", "火", "水", "木", "金", "土", "日"];
+
+const ReminderFormWithPrompt = () => {
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [times, setTimes] = useState<ReminderTime>({
+    beforeMeal: null,
+    afterMeal: null,
+    beforeSleep: null,
+  });
   const [loading, setLoading] = useState(true);
-  const [useSame, setUseSame] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const reminderId = "reminder-setting";
 
   useEffect(() => {
-    const fetchReminders = async () => {
-      const docRef = doc(db, "reminders", "user_reminders");
+    const fetchData = async () => {
+      const docRef = doc(db, "reminders", reminderId);
       const docSnap = await getDoc(docRef);
-
       if (docSnap.exists()) {
-        const data = docSnap.data() as { weekData: WeekReminders };
-        setAllReminders(data.weekData || {});
+        const data = docSnap.data() as ReminderData;
+        const today = new Date().getDay();
+        const weekdayIndex = (today + 6) % 7;
+        const day = weekdays[weekdayIndex];
+        if (data[day]) {
+          setSelectedDays(
+            Object.entries(data)
+              .filter(([_, value]) => value.active)
+              .map(([key]) => key)
+          );
+          setTimes(data[day].times);
+        }
       }
-
       setLoading(false);
     };
 
-    fetchReminders();
+    fetchData();
   }, []);
 
-  const getDisplayData = () => {
-    const dayToShow = useSame ? "月" : selectedDay;
-    const reminder = allReminders[dayToShow];
-
-    if (!reminder) return [];
-
-    const rows = [
-      {
-        key: "朝",
-        項目: "朝",
-        食前: reminder.朝?.食前 ?? "-",
-        食後: reminder.朝?.食後 ?? "-"
-      },
-      {
-        key: "昼",
-        項目: "昼",
-        食前: reminder.昼?.食前 ?? "-",
-        食後: reminder.昼?.食後 ?? "-"
-      },
-      {
-        key: "夕",
-        項目: "夕",
-        食前: reminder.夕?.食前 ?? "-",
-        食後: reminder.夕?.食後 ?? "-"
-      },
-      {
-        key: "就寝前",
-        項目: "就寝前",
-        食前: reminder.就寝前?.time ?? "-",
-        食後: "-"
-      }
-    ];
-
-    return rows;
+  const handleCheckboxChange = (day: string, checked: boolean) => {
+    setSelectedDays((prev) =>
+      checked ? [...prev, day] : prev.filter((d) => d !== day)
+    );
   };
 
-  const columns = [
-    {
-      title: "項目",
-      dataIndex: "項目",
-      key: "項目",
-      render: (text: string) => <span style={{ color: "black" }}>{text}</span>
-    },
-    {
-      title: "食前",
-      dataIndex: "食前",
-      key: "食前",
-      render: (text: string) => <span style={{ color: "black" }}>{text}</span>
-    },
-    {
-      title: "食後",
-      dataIndex: "食後",
-      key: "食後",
-      render: (text: string) => <span style={{ color: "black" }}>{text}</span>
+  const handleTimeChange = (type: keyof ReminderTime, time: Dayjs | null) => {
+    setTimes((prev) => ({ ...prev, [type]: time }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const newData: ReminderData = {};
+    weekdays.forEach((day) => {
+      newData[day] = {
+        active: selectedDays.includes(day),
+        times,
+      };
+    });
+
+    try {
+      await setDoc(doc(db, "reminders", reminderId), {
+        ...newData,
+        timestamp: serverTimestamp(),
+      });
+      message.success("リマインダーを保存しました");
+    } catch {
+      message.error("保存に失敗しました");
+    } finally {
+      setSaving(false);
     }
-  ];
+  };
+
+  const handleDelete = async () => {
+    Modal.confirm({
+      title: "削除確認",
+      content: "本当に削除しますか？",
+      okText: "削除",
+      cancelText: "キャンセル",
+      onOk: async () => {
+        await deleteDoc(doc(db, "reminders", reminderId));
+        setSelectedDays([]);
+        setTimes({ beforeMeal: null, afterMeal: null, beforeSleep: null });
+        message.success("リマインダーを削除しました。");
+      },
+    });
+  };
+
+  if (loading) return <Spin />;
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3} style={{ textAlign: "center",color:"black" }}>
-        服薬リマインダー表示
-      </Title>
-
-      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 16 }}>
-        {daysOfWeek.map((day) => (
-          <Button
-            key={day}
-            type={!useSame && selectedDay === day ? "primary" : "default"}
-            onClick={() => {
-              setSelectedDay(day);
-              setUseSame(false);
-            }}
-          >
-            {day}
-          </Button>
-        ))}
-        <Button type={useSame ? "primary" : "default"} danger onClick={() => setUseSame(true)}>
-          全部同じ
-        </Button>
+    <div
+      style={{
+        backgroundColor: "#f5f0e6",
+        padding: "2rem",
+        borderRadius: "1rem",
+        fontSize: "1.5rem",
+        fontWeight: 500,
+        color: "#000",
+      }}
+    >
+      <div style={{ marginBottom: "2rem" }}>
+        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+          {weekdays.map((day, idx) => {
+            const isSelected = selectedDays.includes(day);
+            const isSunday = idx === 6;
+            const isSaturday = idx === 5;
+            return (
+              <label
+                key={day}
+                style={{
+                  fontSize: "1.6rem",
+                  fontWeight: "bold",
+                  color: isSunday
+                    ? "red"
+                    : isSaturday
+                    ? "blue"
+                    : isSelected
+                    ? "#000"
+                    : "#aaa",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  onChange={(e) =>
+                    handleCheckboxChange(day, e.target.checked)
+                  }
+                  style={{ transform: "scale(2)", marginRight: "0.5rem" }}
+                />
+                {day}
+              </label>
+            );
+          })}
+        </div>
       </div>
 
-      {loading ? (
-        <Spin />
-      ) : (
-        <Table
-          dataSource={getDisplayData()}
-          columns={columns}
-          pagination={false}
-          bordered
-          style={{ color: "black" }}
-        />
-      )}
+      <table style={{ width: "100%", borderSpacing: "1.5rem" }}>
+        <thead>
+          <tr>
+            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>項目</th>
+            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>有効</th>
+            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>食前</th>
+            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>食後</th>
+            <th style={{ fontSize: "1.6rem", color: "black", fontWeight: "bold" }}>就寝前時間</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{ textAlign: "center" }}>服薬</td>
+            <td style={{ textAlign: "center" }}>
+              <Checkbox
+                checked={
+                  !!(times.beforeMeal || times.afterMeal || times.beforeSleep)
+                }
+                disabled
+                style={{ transform: "scale(2)" }}
+              />
+            </td>
+            <td style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: "bold",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                {times.beforeMeal ? times.beforeMeal.format("HH:mm") : "ー"}
+              </div>
+              <TimePicker
+                value={times.beforeMeal}
+                onChange={(time) => handleTimeChange("beforeMeal", time)}
+                format="HH:mm"
+                placeholder="選択"
+                style={{ fontSize: "1.5rem", width: "100%" }}
+              />
+            </td>
+            <td style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: "bold",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                {times.afterMeal ? times.afterMeal.format("HH:mm") : "ー"}
+              </div>
+              <TimePicker
+                value={times.afterMeal}
+                onChange={(time) => handleTimeChange("afterMeal", time)}
+                format="HH:mm"
+                placeholder="選択"
+                style={{ fontSize: "1.5rem", width: "100%" }}
+              />
+            </td>
+            <td style={{ textAlign: "center" }}>
+              <TimePicker
+                value={times.beforeSleep}
+                onChange={(time) => handleTimeChange("beforeSleep", time)}
+                format="HH:mm"
+                placeholder="選択"
+                style={{ fontSize: "1.5rem", width: "100%" }}
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style={{ marginTop: "2rem", display: "flex", gap: "1rem" }}>
+        <Button type="primary" onClick={handleSave} loading={saving} size="large">
+          保存
+        </Button>
+        <Button danger onClick={handleDelete} size="large">
+          削除
+        </Button>
+      </div>
     </div>
   );
 };
 
-export default ReminderDisplay;
+export default ReminderFormWithPrompt;
