@@ -100,7 +100,7 @@ const ReminderDisplay: React.FC = () => {
 
   return (
     <div style={{ padding: 24 }}>
-      <Title level={3} style={{ textAlign: "center",color:"black" }}>
+      <Title level={3} style={{ textAlign: "center" }}>
         服薬リマインダー表示
       </Title>
 
