@@ -3,8 +3,7 @@ import { collection, addDoc, Timestamp } from 'firebase/firestore'
 
 /**
  * 服薬リマインダーのデータを Firestore に保存します。
- * @param times 朝・昼・夕・就寝前 の時間（例: { 朝: "08:00", 昼: "12:00", ... }）
- * @param days 服用する日数（例: 7）
+ *  * @param days 服用する日数（例: 7）
  * @returns Firestore に保存されたドキュメントの ID
  */
 export const saveReminderToFirestore = async (
