@@ -144,7 +144,7 @@ const ReminderFormWithPrompt: React.FC<Props> = ({
         updatedAt: serverTimestamp(),
       });
 
-      message.success("保存しました");
+      message.success("保存に失敗しました。");
 
       setSavedTimes(times);
       setSavedDays(selectedDays);
