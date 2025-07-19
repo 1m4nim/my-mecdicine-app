@@ -1,0 +1,21 @@
+
+.home-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-image: url('/background.jpg'); /* publicディレクトリに背景画像を配置 */
+  background-size: cover;
+  background-position: center;
+}
+
+
+.form-wrapper {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  min-width: 360px;
+  max-width: 600px;
+  width: 100%;
+}

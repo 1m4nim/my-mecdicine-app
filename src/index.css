@@ -24,10 +24,17 @@ a:hover {
 
 body {
   margin: 0;
+  background-color: #f0f4f8; 
   display: flex;
-  place-items: center;
-  min-width: 320px;
+  justify-content: center;
+}
+
+.container {
+  background-color: #fdf6e3; 
+  width: 100%;
+  max-width: 500px; 
   min-height: 100vh;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
 h1 {

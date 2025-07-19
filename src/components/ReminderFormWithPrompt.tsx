@@ -1,161 +1,165 @@
-import React, { useEffect, useState } from "react";
-import { TimePicker, Checkbox, Button, message } from "antd";
-import type { Dayjs } from "dayjs";
-import dayjs from "dayjs";
+import React, { useState } from "react";
+import { Checkbox, TimePicker, Typography, Button } from "antd";
+import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ja";
-import { db } from "../firebase";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 dayjs.locale("ja");
 
-const timings = ["朝", "昼", "夕", "就寝前"];
+const { Title } = Typography;
+
 const daysOfWeek = ["月", "火", "水", "木", "金", "土", "日"];
 
+const dayColors: { [key: string]: string } = {
+  月: "black",
+  火: "black",
+  水: "black",
+  木: "black",
+  金: "black",
+  土: "blue",
+  日: "red",
+};
+
 const ReminderFormWithPrompt = () => {
-  const [selectedDay, setSelectedDay] = useState<string>("月");
-  const [loading, setLoading] = useState(false);
-  const [values, setValues] = useState<{
-    [timing: string]: {
-      time: Dayjs | null;
-      beforeMeal: boolean;
-      afterMeal: boolean;
-    };
-  }>({});
+  const [selectedDay, setSelectedDay] = useState("月");
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      const docRef = doc(db, "reminders", selectedDay);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const converted: typeof values = {};
-        for (const timing of Object.keys(data)) {
-          converted[timing] = {
-            time: data[timing].time
-              ? dayjs(
-                  data[timing].time?.toDate
-                    ? data[timing].time.toDate()
-                    : data[timing].time
-                )
-              : null,
-            beforeMeal: !!data[timing].beforeMeal,
-            afterMeal: !!data[timing].afterMeal,
-          };
-        }
-        setValues(converted);
-      } else {
-        setValues({});
-      }
-      setLoading(false);
+  const [times, setTimes] = useState<{
+    [day: string]: {
+      morningBefore: Dayjs | null;
+      morningAfter: Dayjs | null;
+      afternoonBefore: Dayjs | null;
+      afternoonAfter: Dayjs | null;
+      eveningBefore: Dayjs | null;
+      eveningAfter: Dayjs | null;
+      beforeBed: Dayjs | null;
     };
-    loadData();
-  }, [selectedDay]);
+  }>(() =>
+    Object.fromEntries(
+      daysOfWeek.map((day) => [
+        day,
+        {
+          morningBefore: null,
+          morningAfter: null,
+          afternoonBefore: null,
+          afternoonAfter: null,
+          eveningBefore: null,
+          eveningAfter: null,
+          beforeBed: null,
+        },
+      ])
+    )
+  );
 
-  const handleTimeChange = (timing: string, time: Dayjs | null) => {
-    setValues((prev) => ({
-      ...prev,
-      [timing]: { ...prev[timing], time },
-    }));
+  const [checked, setChecked] = useState<{
+    [day: string]: {
+      morningBefore: boolean;
+      morningAfter: boolean;
+      afternoonBefore: boolean;
+      afternoonAfter: boolean;
+      eveningBefore: boolean;
+      eveningAfter: boolean;
+    };
+  }>(() =>
+    Object.fromEntries(
+      daysOfWeek.map((day) => [
+        day,
+        {
+          morningBefore: false,
+          morningAfter: false,
+          afternoonBefore: false,
+          afternoonAfter: false,
+          eveningBefore: false,
+          eveningAfter: false,
+        },
+      ])
+    )
+  );
+
+  const handleTimeChange = (
+    timeKey: keyof typeof times["月"],
+    time: Dayjs | null
+  ) => {
+    setTimes({
+      ...times,
+      [selectedDay]: {
+        ...times[selectedDay],
+        [timeKey]: time,
+      },
+    });
   };
 
   const handleCheckboxChange = (
-    timing: string,
-    field: "beforeMeal" | "afterMeal",
-    checked: boolean
+    key: keyof typeof checked["月"],
+    value: boolean
   ) => {
-    setValues((prev) => ({
-      ...prev,
-      [timing]: { ...prev[timing], [field]: checked },
-    }));
+    setChecked({
+      ...checked,
+      [selectedDay]: {
+        ...checked[selectedDay],
+        [key]: value,
+      },
+    });
   };
 
-  const handleSave = async () => {
-    const dataToSave: any = {};
-    for (const timing of timings) {
-      const value = values[timing];
-      if (value) {
-        dataToSave[timing] = {
-          time: value.time ? value.time.toDate() : null,
-          beforeMeal: value.beforeMeal || false,
-          afterMeal: value.afterMeal || false,
-        };
-      }
-    }
-
-    try {
-      await setDoc(doc(db, "reminders", selectedDay), {
-        ...dataToSave,
-        updatedAt: serverTimestamp(),
-      });
-      message.success("リマインダーを保存しました！");
-    } catch (err) {
-      console.error(err);
-      message.error("保存に失敗しました。");
-    }
-  };
-
-  const handleCopyFromPrevious = async () => {
-    const currentIndex = daysOfWeek.indexOf(selectedDay);
-    const prevDay = daysOfWeek[(currentIndex + 6) % 7];
-    const docRef = doc(db, "reminders", prevDay);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      const copied: typeof values = {};
-      for (const timing of Object.keys(data)) {
-        copied[timing] = {
-          time: data[timing].time
-            ? dayjs(
-                data[timing].time?.toDate
-                  ? data[timing].time.toDate()
-                  : data[timing].time
-              )
-            : null,
-          beforeMeal: !!data[timing].beforeMeal,
-          afterMeal: !!data[timing].afterMeal,
-        };
-      }
-      setValues(copied);
-      message.success("前週のデータをコピーしました！");
-    } else {
-      message.warning("前週のデータが見つかりませんでした。");
-    }
-  };
-
-  const getDayButtonStyle = (day: string, index: number) => {
-    if (day === selectedDay) {
-      return { backgroundColor: "#e6f7ff", fontWeight: "bold" };
-    }
-    if (index === 6) {
-      return { backgroundColor: "#ffcccc", color: "red" }; // 日曜
-    }
-    if (index === 5) {
-      return { backgroundColor: "#cce5ff", color: "blue" }; // 土曜
-    }
-    return { backgroundColor: "white", color: "black" };
-  };
-
-  return (
+  const renderTimeSet = (
+    label: string,
+    beforeKey: keyof typeof times["月"],
+    afterKey: keyof typeof times["月"]
+  ) => (
     <div
       style={{
-        textAlign: "center",
-        padding: "2rem",
+        border: "1px solid #ccc",
+        borderRadius: "8px",
+        padding: "16px",
+        marginBottom: "16px",
         color: "black",
-        backgroundColor: "#f5f0e1", // 薄ブラウン背景
-        minHeight: "100vh",
       }}
     >
-      <h2 style={{ marginTop: "4rem" }}>服薬リマインダー</h2>
+      <Title level={5}>{label}</Title>
+      <Checkbox
+        checked={checked[selectedDay][beforeKey]}
+        onChange={(e) => handleCheckboxChange(beforeKey, e.target.checked)}
+      >
+        食前
+      </Checkbox>
+      {checked[selectedDay][beforeKey] && (
+        <TimePicker
+          value={times[selectedDay][beforeKey]}
+          onChange={(time) => handleTimeChange(beforeKey, time)}
+          format="HH:mm"
+          style={{ display: "block", marginTop: 8 }}
+        />
+      )}
 
-      <div style={{ marginBottom: "1rem" }}>
-        {daysOfWeek.map((day, index) => (
+      <Checkbox
+        checked={checked[selectedDay][afterKey]}
+        onChange={(e) => handleCheckboxChange(afterKey, e.target.checked)}
+        style={{ marginTop: 12 }}
+      >
+        食後
+      </Checkbox>
+      {checked[selectedDay][afterKey] && (
+        <TimePicker
+          value={times[selectedDay][afterKey]}
+          onChange={(time) => handleTimeChange(afterKey, time)}
+          format="HH:mm"
+          style={{ display: "block", marginTop: 8 }}
+        />
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 450, margin: "0 auto", padding: "24px" }}>
+      <div style={{ textAlign: "center", marginBottom: "16px" }}>
+        {daysOfWeek.map((day) => (
           <Button
             key={day}
             onClick={() => setSelectedDay(day)}
             style={{
-              margin: "0 4px",
-              ...getDayButtonStyle(day, index),
+              margin: "0 4px 8px",
+              backgroundColor: selectedDay === day ? "#e6f7ff" : "#fff",
+              fontWeight: selectedDay === day ? "bold" : undefined,
+              color: dayColors[day],
             }}
           >
             {day}
@@ -163,55 +167,26 @@ const ReminderFormWithPrompt = () => {
         ))}
       </div>
 
-      {loading ? (
-        <p>読み込み中...</p>
-      ) : (
-        <div style={{ maxWidth: 500, margin: "0 auto" }}>
-          {timings.map((timing) => (
-            <div
-              key={timing}
-              style={{
-                marginBottom: "1rem",
-                padding: "1rem",
-                border: "1px solid #ccc",
-                borderRadius: "8px",
-              }}
-            >
-              <h3>{timing}</h3>
-              <TimePicker
-                value={values[timing]?.time || null}
-                onChange={(time) => handleTimeChange(timing, time)}
-                format="HH:mm"
-              />
-              <div style={{ marginTop: "0.5rem" }}>
-                <Checkbox
-                  checked={values[timing]?.beforeMeal || false}
-                  onChange={(e) =>
-                    handleCheckboxChange(timing, "beforeMeal", e.target.checked)
-                  }
-                >
-                  食前
-                </Checkbox>
-                <Checkbox
-                  checked={values[timing]?.afterMeal || false}
-                  onChange={(e) =>
-                    handleCheckboxChange(timing, "afterMeal", e.target.checked)
-                  }
-                  style={{ marginLeft: "1rem" }}
-                >
-                  食後
-                </Checkbox>
-              </div>
-            </div>
-          ))}
-          <Button type="primary" onClick={handleSave} style={{ marginRight: 10 }}>
-            保存
-          </Button>
-          <Button type="dashed" onClick={handleCopyFromPrevious}>
-            前週の設定をコピー
-          </Button>
-        </div>
-      )}
+      {renderTimeSet("朝", "morningBefore", "morningAfter")}
+      {renderTimeSet("昼", "afternoonBefore", "afternoonAfter")}
+      {renderTimeSet("夕", "eveningBefore", "eveningAfter")}
+
+      <div
+        style={{
+          border: "1px solid #ccc",
+          borderRadius: "8px",
+          padding: "16px",
+          marginBottom: "16px",
+          color: "black",
+        }}
+      >
+        <Title level={5}>就寝前</Title>
+        <TimePicker
+          value={times[selectedDay].beforeBed}
+          onChange={(time) => handleTimeChange("beforeBed", time)}
+          format="HH:mm"
+        />
+      </div>
     </div>
   );
 };
