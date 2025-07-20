@@ -75,7 +75,7 @@ const ReminderFormWithPrompt = () => {
   );
 
   const handleTimeChange = (
-    timeKey: keyof typeof times["月"],
+    timeKey: keyof (typeof times)["月"],
     time: Dayjs | null
   ) => {
     setTimes({
@@ -88,7 +88,7 @@ const ReminderFormWithPrompt = () => {
   };
 
   const handleCheckboxChange = (
-    key: keyof typeof checked["月"],
+    key: keyof (typeof checked)["月"],
     value: boolean
   ) => {
     setChecked({
@@ -102,8 +102,8 @@ const ReminderFormWithPrompt = () => {
 
   const renderTimeSet = (
     label: string,
-    beforeKey: keyof typeof times["月"],
-    afterKey: keyof typeof times["月"]
+    beforeKey: keyof (typeof times)["月"],
+    afterKey: keyof (typeof times)["月"]
   ) => (
     <div
       style={{
@@ -114,43 +114,59 @@ const ReminderFormWithPrompt = () => {
         color: "black",
       }}
     >
-      <Title level={5}>{label}</Title>
-      <Checkbox
-        checked={checked[selectedDay][beforeKey]}
-        onChange={(e) => handleCheckboxChange(beforeKey, e.target.checked)}
-      >
-        食前
-      </Checkbox>
-      {checked[selectedDay][beforeKey] && (
-        <TimePicker
-          value={times[selectedDay][beforeKey]}
-          onChange={(time) => handleTimeChange(beforeKey, time)}
-          format="HH:mm"
-          style={{ display: "block", marginTop: 8 }}
-        />
-      )}
+      <Title level={5} style={{ marginTop: 0, marginBottom: 8 }}>
+        {label}
+      </Title>
 
-      <Checkbox
-        checked={checked[selectedDay][afterKey]}
-        onChange={(e) => handleCheckboxChange(afterKey, e.target.checked)}
-        style={{ marginTop: 12 }}
-      >
-        食後
-      </Checkbox>
-      {checked[selectedDay][afterKey] && (
-        <TimePicker
-          value={times[selectedDay][afterKey]}
-          onChange={(time) => handleTimeChange(afterKey, time)}
-          format="HH:mm"
-          style={{ display: "block", marginTop: 8 }}
-        />
-      )}
+      {/* 食前 */}
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+        <Checkbox
+          checked={checked[selectedDay][beforeKey]}
+          onChange={(e) => handleCheckboxChange(beforeKey, e.target.checked)}
+        >
+          食前
+        </Checkbox>
+        {checked[selectedDay][beforeKey] && (
+          <TimePicker
+            value={times[selectedDay][beforeKey]}
+            onChange={(time) => handleTimeChange(beforeKey, time)}
+            format="HH:mm"
+            style={{ marginLeft: 16 }}
+          />
+        )}
+      </div>
+
+      {/* 食後 */}
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <Checkbox
+          checked={checked[selectedDay][afterKey]}
+          onChange={(e) => handleCheckboxChange(afterKey, e.target.checked)}
+        >
+          食後
+        </Checkbox>
+        {checked[selectedDay][afterKey] && (
+          <TimePicker
+            value={times[selectedDay][afterKey]}
+            onChange={(time) => handleTimeChange(afterKey, time)}
+            format="HH:mm"
+            style={{ marginLeft: 16 }}
+          />
+        )}
+      </div>
     </div>
   );
 
   return (
     <div style={{ maxWidth: 450, margin: "0 auto", padding: "24px" }}>
-      <div style={{ textAlign: "center", marginBottom: "16px" }}>
+      {/* 曜日ボタンのコンテナにmarginTopをつける */}
+      <div
+        style={{
+          textAlign: "center",
+          marginBottom: "16px",
+          marginTop: "6rem",
+          lineHeight: 1,
+        }}
+      >
         {daysOfWeek.map((day) => (
           <Button
             key={day}
@@ -176,11 +192,13 @@ const ReminderFormWithPrompt = () => {
           border: "1px solid #ccc",
           borderRadius: "8px",
           padding: "16px",
-          marginBottom: "16px",
+          marginBottom: 0, // 余白をなくす
           color: "black",
         }}
       >
-        <Title level={5}>就寝前</Title>
+        <Title level={5} style={{ marginTop: 0, marginBottom: 0 }}>
+          就寝前
+        </Title>
         <TimePicker
           value={times[selectedDay].beforeBed}
           onChange={(time) => handleTimeChange("beforeBed", time)}
