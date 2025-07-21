@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import  { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const daysOfWeek = ["月", "火", "水", "木", "金", "土", "日"];
