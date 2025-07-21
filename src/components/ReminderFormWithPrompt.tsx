@@ -264,7 +264,9 @@ const ReminderFormWithPrompt: React.FC = () => {
         <div style={{ display: "flex", alignItems: "center" }}>
           <Checkbox
             checked={checked[selectedDay].beforeBed}
-            onChange={(e) => handleCheckboxChange("beforeBed", e.target.checked)}
+            onChange={(e) =>
+              handleCheckboxChange("beforeBed", e.target.checked)
+            }
           >
             ←押すと時間が選べるよ
           </Checkbox>
@@ -307,10 +309,8 @@ const ReminderFormWithPrompt: React.FC = () => {
       {/* 保存ボタン */}
       <div
         style={{
-          position: "fixed",
-          bottom: 20,
-          right: 20,
-          zIndex: 9999,
+          textAlign: "center",
+          marginBottom: "3rem",
         }}
       >
         <Button type="primary" onClick={handleSave}>
