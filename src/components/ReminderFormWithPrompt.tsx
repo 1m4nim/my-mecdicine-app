@@ -1,14 +1,12 @@
-import React, { useState } from "react";
-import { Checkbox, TimePicker, Typography, Button } from "antd";
-import dayjs, { Dayjs } from "dayjs";
-import "dayjs/locale/ja";
-
-dayjs.locale("ja");
+import React, { useState, useEffect } from "react";
+import TimePicker from "react-time-picker";
+import { Checkbox, Typography, Button } from "antd";
+import { useNavigate } from "react-router-dom";
+import "react-time-picker/dist/TimePicker.css";
+import "react-clock/dist/Clock.css";
 
 const { Title } = Typography;
-
 const daysOfWeek = ["月", "火", "水", "木", "金", "土", "日"];
-
 const dayColors: { [key: string]: string } = {
   月: "black",
   火: "black",
@@ -19,113 +17,159 @@ const dayColors: { [key: string]: string } = {
   日: "red",
 };
 
-const ReminderFormWithPrompt = () => {
+const adjustTimeByWheel = (current: string, deltaY: number): string => {
+  const [h, m] = current?.split(":").map(Number) ?? [0, 0];
+  let totalMinutes = h * 60 + m;
+  const increment = deltaY < 0 ? 1 : -1;
+  totalMinutes = (totalMinutes + increment + 1440) % 1440;
+  const newHour = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
+  const newMinute = (totalMinutes % 60).toString().padStart(2, "0");
+  return `${newHour}:${newMinute}`;
+};
+
+const ReminderFormWithPrompt: React.FC = () => {
+  const navigate = useNavigate();
   const [selectedDay, setSelectedDay] = useState("月");
 
-  const [times, setTimes] = useState<{
-    [day: string]: {
-      morningBefore: Dayjs | null;
-      morningAfter: Dayjs | null;
-      afternoonBefore: Dayjs | null;
-      afternoonAfter: Dayjs | null;
-      eveningBefore: Dayjs | null;
-      eveningAfter: Dayjs | null;
-      beforeBed: Dayjs | null;
-    };
-  }>(() =>
-    Object.fromEntries(
-      daysOfWeek.map((day) => [
-        day,
-        {
-          morningBefore: null,
-          morningAfter: null,
-          afternoonBefore: null,
-          afternoonAfter: null,
-          eveningBefore: null,
-          eveningAfter: null,
-          beforeBed: null,
-        },
-      ])
-    )
+  // 初期状態（空のオブジェクト）
+  const emptyTimes = Object.fromEntries(
+    daysOfWeek.map((day) => [
+      day,
+      {
+        morningBefore: "",
+        morningAfter: "",
+        afternoonBefore: "",
+        afternoonAfter: "",
+        eveningBefore: "",
+        eveningAfter: "",
+        beforeBed: "",
+      },
+    ])
   );
 
-  const [checked, setChecked] = useState<{
-    [day: string]: {
-      morningBefore: boolean;
-      morningAfter: boolean;
-      afternoonBefore: boolean;
-      afternoonAfter: boolean;
-      eveningBefore: boolean;
-      eveningAfter: boolean;
-    };
-  }>(() =>
-    Object.fromEntries(
-      daysOfWeek.map((day) => [
-        day,
-        {
-          morningBefore: false,
-          morningAfter: false,
-          afternoonBefore: false,
-          afternoonAfter: false,
-          eveningBefore: false,
-          eveningAfter: false,
-        },
-      ])
-    )
+  const emptyChecked = Object.fromEntries(
+    daysOfWeek.map((day) => [
+      day,
+      {
+        morningBefore: false,
+        morningAfter: false,
+        afternoonBefore: false,
+        afternoonAfter: false,
+        eveningBefore: false,
+        eveningAfter: false,
+      },
+    ])
   );
 
-  // 保存したデータ
-  const [savedData, setSavedData] = useState<{
-    times: typeof times;
-    checked: typeof checked;
-  } | null>(null);
+  const [times, setTimes] = useState(emptyTimes);
+  const [checked, setChecked] = useState(emptyChecked);
 
-  // 時間変更ハンドラ
+  // ローカルストレージから復元
+  useEffect(() => {
+    const saved = localStorage.getItem("reminderData");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.times && parsed.checked) {
+          setTimes(parsed.times);
+          setChecked(parsed.checked);
+        }
+      } catch {
+        // JSONパース失敗なら無視
+      }
+    }
+  }, []);
+
+  // 「毎日同じです」ボタン
+  const handleCopyToAllDays = () => {
+    const baseTimes = times[selectedDay];
+    const baseChecked = checked[selectedDay];
+    const newTimes = { ...times };
+    const newChecked = { ...checked };
+    daysOfWeek.forEach((day) => {
+      newTimes[day] = { ...baseTimes };
+      newChecked[day] = { ...baseChecked };
+    });
+    setTimes(newTimes);
+    setChecked(newChecked);
+  };
+
   const handleTimeChange = (
-    timeKey: keyof (typeof times)["月"],
-    time: Dayjs | null
+    timeKey: keyof typeof times["月"],
+    time: string
   ) => {
-    setTimes({
-      ...times,
+    setTimes((prev) => ({
+      ...prev,
       [selectedDay]: {
-        ...times[selectedDay],
+        ...prev[selectedDay],
         [timeKey]: time,
       },
-    });
+    }));
   };
 
-  // チェックボックス変更ハンドラ
   const handleCheckboxChange = (
-    key: keyof (typeof checked)["月"],
+    key: keyof typeof checked["月"],
     value: boolean
   ) => {
-    setChecked({
-      ...checked,
+    setChecked((prev) => ({
+      ...prev,
       [selectedDay]: {
-        ...checked[selectedDay],
+        ...prev[selectedDay],
         [key]: value,
       },
-    });
+    }));
   };
 
-  // 保存ボタン押下
+  const isAnyTimeSelected = (): boolean => {
+    for (const day of daysOfWeek) {
+      const dayChecked = checked[day];
+      if (
+        dayChecked.morningBefore ||
+        dayChecked.morningAfter ||
+        dayChecked.afternoonBefore ||
+        dayChecked.afternoonAfter ||
+        dayChecked.eveningBefore ||
+        dayChecked.eveningAfter
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // 保存してページ遷移
   const handleSave = () => {
-    setSavedData({
-      times,
-      checked,
-    });
+    if (!isAnyTimeSelected()) {
+      alert("少なくとも1つは食前・食後の時間を選択してください。");
+      return;
+    }
+    localStorage.setItem(
+      "reminderData",
+      JSON.stringify({ times, checked })
+    );
+    navigate("/saved", { state: { times, checked } });
   };
 
-  // 削除ボタン押下（保存データクリア）
-  const handleDelete = () => {
-    setSavedData(null);
-  };
+  const renderTimePicker = (timeKey: keyof typeof times["月"]) => (
+    <TimePicker
+      value={times[selectedDay][timeKey]}
+      onChange={(time: string) => handleTimeChange(timeKey, time)}
+      disableClock
+      format="HH:mm"
+      clearIcon={null}
+      onWheel={(e) => {
+        e.preventDefault();
+        const current = times[selectedDay][timeKey] || "00:00";
+        const next = adjustTimeByWheel(current, e.deltaY);
+        handleTimeChange(timeKey, next);
+      }}
+    />
+  );
 
-  // 時間設定UIを描画
   const renderTimeSet = (
     label: string,
-    beforeKey: keyof (typeof times)["月"],
-    afterKey: keyof (typeof times)["月"]
+    beforeKey: keyof typeof times["月"],
+    afterKey: keyof typeof times["月"]
   ) => (
     <div
       style={{
@@ -149,12 +193,7 @@ const ReminderFormWithPrompt = () => {
           食前
         </Checkbox>
         {checked[selectedDay][beforeKey] && (
-          <TimePicker
-            value={times[selectedDay][beforeKey]}
-            onChange={(time) => handleTimeChange(beforeKey, time)}
-            format="HH:mm"
-            style={{ marginLeft: 16 }}
-          />
+          <div style={{ marginLeft: 16 }}>{renderTimePicker(beforeKey)}</div>
         )}
       </div>
 
@@ -167,133 +206,99 @@ const ReminderFormWithPrompt = () => {
           食後
         </Checkbox>
         {checked[selectedDay][afterKey] && (
-          <TimePicker
-            value={times[selectedDay][afterKey]}
-            onChange={(time) => handleTimeChange(afterKey, time)}
-            format="HH:mm"
-            style={{ marginLeft: 16 }}
-          />
+          <div style={{ marginLeft: 16 }}>{renderTimePicker(afterKey)}</div>
         )}
       </div>
     </div>
   );
 
-  // 保存されたリマインダー表示コンポーネント
-  const RenderSavedData = ({
-    data,
-    onDelete,
-  }: {
-    data: { times: typeof times; checked: typeof checked };
-    onDelete: () => void;
-  }) => {
-    return (
-      <div
-        style={{
-          marginTop: 32,
-          padding: 16,
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          backgroundColor: "#fafafa",
-          maxWidth: 450,
-          marginLeft: "auto",
-          marginRight: "auto",
-          position: "relative",
-        }}
-      >
-        {/* 削除ボタンを右上に配置 */}
-        <Button
-          danger
-          size="small"
-          onClick={onDelete}
-          style={{ position: "absolute", top: 8, right: 8 }}
-        >
-          削除
-        </Button>
-
-        <Title level={4} style={{ marginBottom: 24, textAlign: "center" }}>
-          保存されたリマインダー内容
-        </Title>
-
-        {daysOfWeek.map((day) => {
-          const dayTimes = data.times[day];
-          const dayChecked = data.checked[day];
-
-          const hasData =
-            dayChecked.morningBefore ||
-            dayChecked.morningAfter ||
-            dayChecked.afternoonBefore ||
-            dayChecked.afternoonAfter ||
-            dayChecked.eveningBefore ||
-            dayChecked.eveningAfter ||
-            dayTimes.beforeBed !== null;
-
-          if (!hasData) return null;
-
-          return (
-            <div
-              key={day}
-              style={{
-                marginBottom: 20,
-                borderBottom: "1px solid #ddd",
-                paddingBottom: 10,
-              }}
-            >
-              <Title
-                level={5}
-                style={{ color: dayColors[day], marginBottom: 12 }}
-              >
-                {day}曜日
-              </Title>
-
-              {(dayChecked.morningBefore || dayChecked.morningAfter) && (
-                <div>
-                  <strong>朝: </strong>
-                  {dayChecked.morningBefore &&
-                    `食前 ${dayTimes.morningBefore?.format("HH:mm") || ""} `}
-                  {dayChecked.morningAfter &&
-                    `食後 ${dayTimes.morningAfter?.format("HH:mm") || ""}`}
-                </div>
-              )}
-
-              {(dayChecked.afternoonBefore || dayChecked.afternoonAfter) && (
-                <div>
-                  <strong>昼: </strong>
-                  {dayChecked.afternoonBefore &&
-                    `食前 ${dayTimes.afternoonBefore?.format("HH:mm") || ""} `}
-                  {dayChecked.afternoonAfter &&
-                    `食後 ${dayTimes.afternoonAfter?.format("HH:mm") || ""}`}
-                </div>
-              )}
-
-              {(dayChecked.eveningBefore || dayChecked.eveningAfter) && (
-                <div>
-                  <strong>夕: </strong>
-                  {dayChecked.eveningBefore &&
-                    `食前 ${dayTimes.eveningBefore?.format("HH:mm") || ""} `}
-                  {dayChecked.eveningAfter &&
-                    `食後 ${dayTimes.eveningAfter?.format("HH:mm") || ""}`}
-                </div>
-              )}
-
-              {dayTimes.beforeBed && (
-                <div>
-                  <strong>就寝前: </strong> {dayTimes.beforeBed.format("HH:mm")}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
   return (
     <>
-      {/* 右上に固定の保存ボタン */}
+      {/* 曜日選択＋毎日同じです */}
+      <div
+        style={{
+          textAlign: "center",
+          marginBottom: 16,
+          marginTop: "6rem",
+          lineHeight: 1,
+        }}
+      >
+        {daysOfWeek.map((day) => (
+          <Button
+            key={day}
+            onClick={() => setSelectedDay(day)}
+            style={{
+              margin: "0 4px 8px",
+              backgroundColor: selectedDay === day ? "#e6f7ff" : "#fff",
+              fontWeight: selectedDay === day ? "bold" : undefined,
+              color: dayColors[day],
+            }}
+          >
+            {day}
+          </Button>
+        ))}
+
+        <Button
+          style={{ marginLeft: 12 }}
+          onClick={handleCopyToAllDays}
+          type="dashed"
+        >
+          毎日同じです
+        </Button>
+      </div>
+
+      {/* 時間セット */}
+      {renderTimeSet("朝", "morningBefore", "morningAfter")}
+      {renderTimeSet("昼", "afternoonBefore", "afternoonAfter")}
+      {renderTimeSet("夕", "eveningBefore", "eveningAfter")}
+
+      {/* 就寝前 */}
+      <div
+        style={{
+          border: "1px solid #ccc",
+          borderRadius: "8px",
+          padding: "16px",
+          marginBottom: "16px",
+          color: "black",
+        }}
+      >
+        <Title level={5} style={{ marginTop: 0, marginBottom: 0 }}>
+          就寝前
+        </Title>
+        <TimePicker
+          value={times[selectedDay].beforeBed}
+          onChange={(time: string) =>
+            setTimes((prev) => ({
+              ...prev,
+              [selectedDay]: {
+                ...prev[selectedDay],
+                beforeBed: time,
+              },
+            }))
+          }
+          disableClock
+          format="HH:mm"
+          clearIcon={null}
+          onWheel={(e) => {
+            e.preventDefault();
+            const current = times[selectedDay].beforeBed || "00:00";
+            const next = adjustTimeByWheel(current, e.deltaY);
+            setTimes((prev) => ({
+              ...prev,
+              [selectedDay]: {
+                ...prev[selectedDay],
+                beforeBed: next,
+              },
+            }));
+          }}
+        />
+      </div>
+
+      {/* 保存ボタン */}
       <div
         style={{
           position: "fixed",
-          top: 20,
+          bottom: 20,
           right: 20,
           zIndex: 9999,
         }}
@@ -302,60 +307,6 @@ const ReminderFormWithPrompt = () => {
           保存
         </Button>
       </div>
-
-      <div style={{ maxWidth: 450, margin: "0 auto", padding: "24px" }}>
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: "16px",
-            marginTop: "6rem",
-            lineHeight: 1,
-          }}
-        >
-          {daysOfWeek.map((day) => (
-            <Button
-              key={day}
-              onClick={() => setSelectedDay(day)}
-              style={{
-                margin: "0 4px 8px",
-                backgroundColor: selectedDay === day ? "#e6f7ff" : "#fff",
-                fontWeight: selectedDay === day ? "bold" : undefined,
-                color: dayColors[day],
-              }}
-            >
-              {day}
-            </Button>
-          ))}
-        </div>
-
-        {renderTimeSet("朝", "morningBefore", "morningAfter")}
-        {renderTimeSet("昼", "afternoonBefore", "afternoonAfter")}
-        {renderTimeSet("夕", "eveningBefore", "eveningAfter")}
-
-        <div
-          style={{
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-            padding: "16px",
-            marginBottom: "16px",
-            color: "black",
-          }}
-        >
-          <Title level={5} style={{ marginTop: 0, marginBottom: 0 }}>
-            就寝前
-          </Title>
-          <TimePicker
-            value={times[selectedDay].beforeBed}
-            onChange={(time) => handleTimeChange("beforeBed", time)}
-            format="HH:mm"
-          />
-        </div>
-      </div>
-
-      {/* 保存データがあれば表示 */}
-      {savedData && (
-        <RenderSavedData data={savedData} onDelete={handleDelete} />
-      )}
     </>
   );
 };

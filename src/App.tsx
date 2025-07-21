@@ -1,23 +1,16 @@
-import React from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ReminderFormWithPrompt from "./components/ReminderFormWithPrompt";
+import SavedPage from "./components/SavedPage";
 
-const Home = () => {
+function App() {
   return (
-    <div
-      style={{
-        height: "100vh",          
-        width: "100vw",           
-        backgroundColor: "#f0f4f8",
-        display: "flex",
-        justifyContent: "center",  
-        alignItems: "center",      
-        padding: "1rem",           
-        boxSizing: "border-box",
-      }}
-    >
-      <ReminderFormWithPrompt />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<ReminderFormWithPrompt />} />
+        <Route path="/saved" element={<SavedPage />} />
+      </Routes>
+    </BrowserRouter>
   );
-};
+}
 
-export default Home;
+export default App;
