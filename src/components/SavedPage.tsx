@@ -77,7 +77,7 @@ const SavedPage: React.FC = () => {
   const { times, checked } = savedData;
 
   return (
-    <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
+    <div style={{ maxWidth: 600, margin: "auto", padding: 20 , color:"black" }}>
       <h2>保存されたリマインダー内容</h2>
       {daysOfWeek.map((day) => {
         const dayTimes = times[day];

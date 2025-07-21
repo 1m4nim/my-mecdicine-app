@@ -22,7 +22,9 @@ const adjustTimeByWheel = (current: string, deltaY: number): string => {
   let totalMinutes = h * 60 + m;
   const increment = deltaY < 0 ? 1 : -1;
   totalMinutes = (totalMinutes + increment + 1440) % 1440;
-  const newHour = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
+  const newHour = Math.floor(totalMinutes / 60)
+    .toString()
+    .padStart(2, "0");
   const newMinute = (totalMinutes % 60).toString().padStart(2, "0");
   return `${newHour}:${newMinute}`;
 };
@@ -31,7 +33,6 @@ const ReminderFormWithPrompt: React.FC = () => {
   const navigate = useNavigate();
   const [selectedDay, setSelectedDay] = useState("月");
 
-  // 初期状態（空のオブジェクト）
   const emptyTimes = Object.fromEntries(
     daysOfWeek.map((day) => [
       day,
@@ -57,6 +58,7 @@ const ReminderFormWithPrompt: React.FC = () => {
         afternoonAfter: false,
         eveningBefore: false,
         eveningAfter: false,
+        beforeBed: false,
       },
     ])
   );
@@ -64,7 +66,6 @@ const ReminderFormWithPrompt: React.FC = () => {
   const [times, setTimes] = useState(emptyTimes);
   const [checked, setChecked] = useState(emptyChecked);
 
-  // ローカルストレージから復元
   useEffect(() => {
     const saved = localStorage.getItem("reminderData");
     if (saved) {
@@ -75,12 +76,11 @@ const ReminderFormWithPrompt: React.FC = () => {
           setChecked(parsed.checked);
         }
       } catch {
-        // JSONパース失敗なら無視
+        // JSON parse error
       }
     }
   }, []);
 
-  // 「毎日同じです」ボタン
   const handleCopyToAllDays = () => {
     const baseTimes = times[selectedDay];
     const baseChecked = checked[selectedDay];
@@ -95,7 +95,7 @@ const ReminderFormWithPrompt: React.FC = () => {
   };
 
   const handleTimeChange = (
-    timeKey: keyof typeof times["月"],
+    timeKey: keyof (typeof times)["月"],
     time: string
   ) => {
     setTimes((prev) => ({
@@ -108,7 +108,7 @@ const ReminderFormWithPrompt: React.FC = () => {
   };
 
   const handleCheckboxChange = (
-    key: keyof typeof checked["月"],
+    key: keyof (typeof checked)["月"],
     value: boolean
   ) => {
     setChecked((prev) => ({
@@ -129,7 +129,8 @@ const ReminderFormWithPrompt: React.FC = () => {
         dayChecked.afternoonBefore ||
         dayChecked.afternoonAfter ||
         dayChecked.eveningBefore ||
-        dayChecked.eveningAfter
+        dayChecked.eveningAfter ||
+        dayChecked.beforeBed
       ) {
         return true;
       }
@@ -137,23 +138,23 @@ const ReminderFormWithPrompt: React.FC = () => {
     return false;
   };
 
-  // 保存してページ遷移
   const handleSave = () => {
     if (!isAnyTimeSelected()) {
       alert("少なくとも1つは食前・食後の時間を選択してください。");
       return;
     }
-    localStorage.setItem(
-      "reminderData",
-      JSON.stringify({ times, checked })
-    );
+    localStorage.setItem("reminderData", JSON.stringify({ times, checked }));
     navigate("/saved", { state: { times, checked } });
   };
 
-  const renderTimePicker = (timeKey: keyof typeof times["月"]) => (
+  const renderTimePicker = (timeKey: keyof (typeof times)["月"]) => (
     <TimePicker
       value={times[selectedDay][timeKey]}
-      onChange={(time: string) => handleTimeChange(timeKey, time)}
+      onChange={(time) => {
+        if (typeof time === "string") {
+          handleTimeChange(timeKey, time);
+        }
+      }}
       disableClock
       format="HH:mm"
       clearIcon={null}
@@ -168,8 +169,8 @@ const ReminderFormWithPrompt: React.FC = () => {
 
   const renderTimeSet = (
     label: string,
-    beforeKey: keyof typeof times["月"],
-    afterKey: keyof typeof times["月"]
+    beforeKey: keyof (typeof times)["月"],
+    afterKey: keyof (typeof times)["月"]
   ) => (
     <div
       style={{
@@ -183,8 +184,6 @@ const ReminderFormWithPrompt: React.FC = () => {
       <Title level={5} style={{ marginTop: 0, marginBottom: 8 }}>
         {label}
       </Title>
-
-      {/* 食前 */}
       <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
         <Checkbox
           checked={checked[selectedDay][beforeKey]}
@@ -196,8 +195,6 @@ const ReminderFormWithPrompt: React.FC = () => {
           <div style={{ marginLeft: 16 }}>{renderTimePicker(beforeKey)}</div>
         )}
       </div>
-
-      {/* 食後 */}
       <div style={{ display: "flex", alignItems: "center" }}>
         <Checkbox
           checked={checked[selectedDay][afterKey]}
@@ -237,7 +234,6 @@ const ReminderFormWithPrompt: React.FC = () => {
             {day}
           </Button>
         ))}
-
         <Button
           style={{ marginLeft: 12 }}
           onClick={handleCopyToAllDays}
@@ -262,36 +258,50 @@ const ReminderFormWithPrompt: React.FC = () => {
           color: "black",
         }}
       >
-        <Title level={5} style={{ marginTop: 0, marginBottom: 0 }}>
+        <Title level={5} style={{ marginTop: 0, marginBottom: 8 }}>
           就寝前
         </Title>
-        <TimePicker
-          value={times[selectedDay].beforeBed}
-          onChange={(time: string) =>
-            setTimes((prev) => ({
-              ...prev,
-              [selectedDay]: {
-                ...prev[selectedDay],
-                beforeBed: time,
-              },
-            }))
-          }
-          disableClock
-          format="HH:mm"
-          clearIcon={null}
-          onWheel={(e) => {
-            e.preventDefault();
-            const current = times[selectedDay].beforeBed || "00:00";
-            const next = adjustTimeByWheel(current, e.deltaY);
-            setTimes((prev) => ({
-              ...prev,
-              [selectedDay]: {
-                ...prev[selectedDay],
-                beforeBed: next,
-              },
-            }));
-          }}
-        />
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <Checkbox
+            checked={checked[selectedDay].beforeBed}
+            onChange={(e) => handleCheckboxChange("beforeBed", e.target.checked)}
+          >
+            ←押すと時間が選べるよ
+          </Checkbox>
+          {checked[selectedDay].beforeBed && (
+            <div style={{ marginLeft: 16 }}>
+              <TimePicker
+                value={times[selectedDay].beforeBed}
+                onChange={(time) => {
+                  if (typeof time === "string") {
+                    setTimes((prev) => ({
+                      ...prev,
+                      [selectedDay]: {
+                        ...prev[selectedDay],
+                        beforeBed: time,
+                      },
+                    }));
+                  }
+                }}
+                disableClock
+                format="HH:mm"
+                clearIcon={null}
+                onWheel={(e) => {
+                  e.preventDefault();
+                  const current = times[selectedDay].beforeBed || "00:00";
+                  const next = adjustTimeByWheel(current, e.deltaY);
+                  setTimes((prev) => ({
+                    ...prev,
+                    [selectedDay]: {
+                      ...prev[selectedDay],
+                      beforeBed: next,
+                    },
+                  }));
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 保存ボタン */}
